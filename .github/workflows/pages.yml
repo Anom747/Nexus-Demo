@@ -200,7 +200,8 @@ jobs:
           set -euo pipefail
 
           mutant_root="$(mktemp -d)"
-          trap 'rm -rf "$mutant_root"' EXIT
+          key_file="$(mktemp)"
+          trap 'rm -rf "$mutant_root"; rm -f "$key_file"' EXIT
 
           git -C "$mutant_root" init -q
           git -C "$mutant_root" config user.name 'NEXUS Security Test'
@@ -210,10 +211,10 @@ jobs:
           git -C "$mutant_root" commit -q -m 'clean root'
           base_commit="$(git -C "$mutant_root" rev-parse HEAD)"
 
-          credential_prefix="$(printf 'g%s_' 'hp')"
-          credential_suffix="$(printf '%s' {A..Z} {0..9})"
-          leak_blob="$(printf 'credential=%s%s\n' "$credential_prefix" "$credential_suffix" | git -C "$mutant_root" hash-object -w --stdin)"
-          leak_tree="$(printf '100644 blob %s\tleak.txt\n' "$leak_blob" | git -C "$mutant_root" mktree)"
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "$key_file" 2>/dev/null
+          leak_blob="$(git -C "$mutant_root" hash-object -w "$key_file")"
+          rm -f "$key_file"
+          leak_tree="$(printf '100644 blob %s\tleak.pem\n' "$leak_blob" | git -C "$mutant_root" mktree)"
           leak_commit="$(printf 'T21_HISTORY_LEAK_BYPASS\n' | git -C "$mutant_root" commit-tree "$leak_tree" -p "$base_commit")"
           git -C "$mutant_root" update-ref refs/t21-mutant/leak "$leak_commit"
 
