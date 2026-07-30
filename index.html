@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'none'; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex, nofollow">
+  <title>NEXUS — Read-only Risk Dashboard Demo</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script src="./app.js" defer></script>
+</head>
+<body>
+  <div class="demo-strip" role="status">
+    <strong>DEMO</strong>
+    <span>FAKE DATA</span>
+    <span>NO EXECUTION</span>
+    <span>READ-ONLY PREVIEW</span>
+  </div>
+
+  <div class="shell">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true"><span></span><span></span><span></span></div>
+        <div><strong>NEXUS</strong><small>TradeMedia OS</small></div>
+      </div>
+
+      <nav aria-label="Dashboard sections">
+        <a href="#overview" class="active"><span>01</span>Overview</a>
+        <a href="#risk"><span>02</span>Risk Vault</a>
+        <a href="#proposal"><span>03</span>Proposal</a>
+        <a href="#checks"><span>04</span>Checks</a>
+        <a href="#audit"><span>05</span>Audit</a>
+      </nav>
+
+      <div class="boundary-card">
+        <p class="eyebrow">Operating boundary</p>
+        <h2>Manual only</h2>
+        <p>This browser preview cannot authorize, place, modify, or close an order.</p>
+      </div>
+
+      <dl class="fixture-meta">
+        <div><dt>Source</dt><dd id="fixture-source">DEMO_FIXTURE</dd></div>
+        <div><dt>Fixture time</dt><dd id="fixture-time">2026-07-30T16:30:00Z</dd></div>
+      </dl>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Safety intelligence workspace</p>
+          <h1>Risk control, made visible.</h1>
+          <p>A static product preview of deterministic risk checks and traceable decisions.</p>
+        </div>
+        <div class="read-only-status"><i></i><span>Demo system<strong>Read-only</strong></span></div>
+      </header>
+
+      <section id="overview" class="hero-grid">
+        <article class="card account-card">
+          <div class="card-head">
+            <div><p class="eyebrow">Fixture account</p><h2 id="account-id">DEMO_ACCOUNT_001</h2><p id="account-program">FTMO 2-Step — Simulation</p></div>
+            <span class="chip">READ_ONLY_DEMO</span>
+          </div>
+          <div class="equity"><span>Current equity</span><strong id="metric-equity">$101,240</strong><small>↗ +1.24% fixture performance</small></div>
+          <div class="chart" aria-label="Decorative simulated equity curve">
+            <svg viewBox="0 0 700 180" role="img">
+              <defs><linearGradient id="area" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#63f2bd" stop-opacity=".28"/><stop offset="100%" stop-color="#63f2bd" stop-opacity="0"/></linearGradient></defs>
+              <path class="grid-line" d="M0 35H700M0 90H700M0 145H700"/>
+              <path class="area" d="M0 145C70 140 95 117 155 124C220 132 250 98 315 106C380 114 405 66 470 82C535 97 570 51 635 58C665 61 686 43 700 37V180H0Z"/>
+              <path class="line" d="M0 145C70 140 95 117 155 124C220 132 250 98 315 106C380 114 405 66 470 82C535 97 570 51 635 58C665 61 686 43 700 37"/>
+              <circle cx="700" cy="37" r="5"/>
+            </svg>
+          </div>
+        </article>
+
+        <article class="card decision-card">
+          <div class="decision-icon" aria-hidden="true">✓</div>
+          <p class="eyebrow">Current Risk Vault result</p>
+          <h2>Risk acceptable</h2>
+          <code id="decision-value">RISK_ACCEPTABLE_NOT_EXECUTION_AUTHORIZED</code>
+          <p>All displayed checks pass for this fake fixture. This result is explicitly not an execution authorization.</p>
+          <dl>
+            <div><dt>Policy</dt><dd id="decision-policy">ftmo-2step-reference / 2026-07-29.2</dd></div>
+            <div><dt>Decision hash</dt><dd id="decision-hash">4d16…b9f2</dd></div>
+          </dl>
+          <div class="no-action"><b>×</b><span><strong>No browser action exists</strong><small>There is deliberately no trade or authorization control.</small></span></div>
+        </article>
+      </section>
+
+      <section class="metrics" aria-label="Key fake metrics">
+        <article><span>Daily headroom</span><strong id="metric-daily">$5,240</strong><small>Above the simulated daily-loss floor.</small></article>
+        <article><span>Overall headroom</span><strong id="metric-overall">$11,240</strong><small>Above the simulated overall-loss floor.</small></article>
+        <article><span>Risk cap used</span><strong id="metric-risk">73%</strong><small>Open plus proposed fixture risk.</small></article>
+        <article class="boundary-metric"><span>Execution capability</span><strong>Absent</strong><small>No broker or order module is exposed.</small></article>
+      </section>
+
+      <section id="risk" class="two-column">
+        <article class="card">
+          <div class="section-head"><div><p class="eyebrow">Deterministic boundaries</p><h2>Risk posture</h2></div><span class="chip">Fixture values</span></div>
+          <div class="risk-list">
+            <div class="risk-item"><div><span>Daily-loss headroom</span><strong id="daily-headroom">$5,240</strong></div><div class="bar"><i id="daily-risk-bar"></i></div><small>$0 <b>Fixture reference $5,000</b></small></div>
+            <div class="risk-item"><div><span>Overall-loss headroom</span><strong id="overall-headroom">$11,240</strong></div><div class="bar"><i id="overall-risk-bar"></i></div><small>$0 <b>Fixture reference $10,000</b></small></div>
+            <div class="risk-item"><div><span>Aggregate open risk</span><strong id="aggregate-risk">$730 / $1,000</strong></div><div class="bar caution"><i id="aggregate-risk-bar"></i></div><small>0% <b>Internal fixture cap</b></small></div>
+          </div>
+          <div class="risk-summary"><div><span>Current open risk</span><strong id="open-risk">$310</strong></div><div><span>Proposed stop risk</span><strong id="proposal-risk">$420</strong></div><div><span>Expected costs</span><strong id="expected-costs">$18</strong></div></div>
+        </article>
+
+        <article class="card boundary-panel">
+          <div class="shield" aria-hidden="true">N</div>
+          <p class="eyebrow">Non-negotiable boundary</p>
+          <h2>Human decision remains separate.</h2>
+          <p>NEXUS can display whether fixture risk appears acceptable. It cannot turn that result into an order.</p>
+          <ul><li>Risk result is informational</li><li>Execution dependency is absent</li><li>Fake account and market facts only</li><li>No browser-side authorization state</li></ul>
+        </article>
+      </section>
+
+      <section id="proposal" class="two-column proposal-layout">
+        <article class="card">
+          <div class="section-head"><div><p class="eyebrow">Sample analysis object</p><h2>Trade proposal</h2></div><span class="proposal-id" id="proposal-id">DEMO_PROPOSAL_1042</span></div>
+          <div class="instrument"><div>EU</div><span><strong id="proposal-symbol">EURUSD</strong><small><b id="proposal-side">LONG</b> · fake market proposal</small></span></div>
+          <div class="price-grid">
+            <div><span>Entry</span><strong id="proposal-entry">1.08342</strong></div>
+            <div><span>Stop</span><strong id="proposal-stop">1.07992</strong></div>
+            <div><span>Target</span><strong id="proposal-target">1.09042</strong></div>
+          </div>
+          <div class="proposal-stats"><div><span>Volume</span><strong id="proposal-volume">1.20 lots</strong></div><div><span>Expected loss</span><strong id="proposal-loss">$420</strong></div><div><span>Risk / reward</span><strong id="proposal-rr">2.0R</strong></div><div><span>Valid until</span><strong id="proposal-valid-until">2026-07-30T16:40:00Z</strong></div></div>
+        </article>
+
+        <article class="card systems-panel">
+          <div class="section-head"><div><p class="eyebrow">Dependency posture</p><h2>System boundaries</h2></div></div>
+          <div id="system-grid" class="system-grid"></div>
+        </article>
+      </section>
+
+      <section id="checks" class="card checks-panel">
+        <div class="section-head"><div><p class="eyebrow">Deterministic review</p><h2>Risk checks</h2></div><span class="chip">No live inputs</span></div>
+        <div class="table-wrap"><table><thead><tr><th>Check</th><th>Actual</th><th>Limit</th><th>Status</th></tr></thead><tbody id="check-table-body"></tbody></table></div>
+      </section>
+
+      <section id="audit" class="two-column audit-layout">
+        <article class="card">
+          <div class="section-head"><div><p class="eyebrow">Fixture trace</p><h2>Audit preview</h2></div></div>
+          <ol id="audit-list" class="audit-list"></ol>
+        </article>
+        <article class="card public-boundary">
+          <p class="eyebrow">Public demo boundary</p>
+          <h2>Nothing here is connected.</h2>
+          <p>This public repository contains only three static browser files. It has no access to the private NEXUS repository, MT5, n8n, email, credentials, policies, or production data.</p>
+          <div class="boundary-code"><span>NETWORK</span><strong>BLOCKED</strong><span>EXECUTION</span><strong>ABSENT</strong><span>DATA</span><strong>FAKE</strong></div>
+        </article>
+      </section>
+
+      <footer><strong>NEXUS DEMO</strong><span>Static · Fake data · No execution · No authorization</span></footer>
+    </main>
+  </div>
+</body>
+</html>
