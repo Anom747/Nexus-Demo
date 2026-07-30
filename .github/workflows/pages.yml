@@ -1,57 +1,162 @@
 name: Deploy NEXUS Demo
 
 on:
+  pull_request:
+    branches:
+      - main
   push:
     branches:
       - main
-    paths:
-      - index.html
-      - styles.css
-      - app.js
-      - .nojekyll
-      - .github/workflows/pages.yml
   workflow_dispatch:
 
-permissions:
-  contents: read
-  pages: write
-  id-token: write
+permissions: {}
 
 concurrency:
-  group: nexus-demo-pages
+  group: nexus-demo-pages-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  guard:
     runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    steps:
+      - name: Check out public demo without persisted credentials
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Enforce exact public repository boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          expected="$({
+            printf '%s\n' \
+              '.github/workflows/pages.yml' \
+              '.nojekyll' \
+              'app.js' \
+              'index.html' \
+              'styles.css'
+          } | LC_ALL=C sort)"
+          actual="$(git ls-files | LC_ALL=C sort)"
+
+          if [ "$actual" != "$expected" ]; then
+            echo 'Tracked-file allowlist mismatch.'
+            diff -u <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") || true
+            exit 1
+          fi
+
+          for file in index.html styles.css app.js .nojekyll; do
+            test -f "$file"
+            test ! -L "$file"
+            test "$(stat -c '%F' -- "$file")" = 'regular file'
+          done
+
+      - name: Enforce read-only browser boundary
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          scan_runtime() {
+            local root="$1"
+            local failed=0
+
+            if grep -nE 'fetch[[:space:]]*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|localStorage|sessionStorage|indexedDB|document[.]cookie|innerHTML|outerHTML|insertAdjacentHTML|eval[[:space:]]*\(|new[[:space:]]+Function|importScripts|new[[:space:]]+Worker' "$root/app.js" "$root/index.html"; then
+              echo 'Forbidden runtime API detected.'
+              failed=1
+            fi
+
+            if grep -nEi '<[^>]+[[:space:]]on[a-z]+[[:space:]]*=|javascript[[:space:]]*:' "$root/index.html"; then
+              echo 'Inline event handler or javascript URL detected.'
+              failed=1
+            fi
+
+            if grep -nEi 'https?://' "$root/app.js" "$root/styles.css"; then
+              echo 'External origin detected in runtime assets.'
+              failed=1
+            fi
+
+            grep -Fq "connect-src 'none'" "$root/index.html" || failed=1
+            grep -Fq 'name="robots"' "$root/index.html" || failed=1
+            grep -Fq 'RISK_ACCEPTABLE_NOT_EXECUTION_AUTHORIZED' "$root/app.js" || failed=1
+            grep -Fq 'NO_EXECUTION_PATH' "$root/app.js" || failed=1
+
+            test "$failed" -eq 0
+          }
+
+          scan_runtime '.'
+
+      - name: Kill T20_PUBLIC_DEPLOY_GATE_BYPASS mutant
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          scan_runtime() {
+            local root="$1"
+            ! grep -nE 'fetch[[:space:]]*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|localStorage|sessionStorage|indexedDB|document[.]cookie|innerHTML|outerHTML|insertAdjacentHTML|eval[[:space:]]*\(|new[[:space:]]+Function|importScripts|new[[:space:]]+Worker' "$root/app.js" "$root/index.html"
+          }
+
+          mutant_root="$(mktemp -d)"
+          trap 'rm -rf "$mutant_root"' EXIT
+          cp -- index.html styles.css app.js "$mutant_root/"
+          printf '\nfetch("/T20_PUBLIC_DEPLOY_GATE_BYPASS");\n' >> "$mutant_root/app.js"
+
+          if scan_runtime "$mutant_root"; then
+            echo 'T20_PUBLIC_DEPLOY_GATE_BYPASS survived.'
+            exit 1
+          fi
+
+          echo 'T20_PUBLIC_DEPLOY_GATE_BYPASS killed as expected.'
+
+  deploy:
+    needs: guard
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - name: Check out public demo
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2, Node 24
+      - name: Check out public demo without persisted credentials
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
 
       - name: Configure GitHub Pages
-        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # official Node 24 merge
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # Node 24 upstream merge
 
-      - name: Stage exact public assets
+      - name: Stage exact public assets without symlink dereference
         shell: bash
         run: |
           set -euo pipefail
           rm -rf _site
           mkdir -m 0755 _site
-          install -m 0644 index.html _site/index.html
-          install -m 0644 styles.css _site/styles.css
-          install -m 0644 app.js _site/app.js
-          install -m 0644 .nojekyll _site/.nojekyll
+
+          for file in index.html styles.css app.js .nojekyll; do
+            test -f "$file"
+            test ! -L "$file"
+            test "$(stat -c '%F' -- "$file")" = 'regular file'
+            cp --no-dereference -- "$file" "_site/$file"
+            test -f "_site/$file"
+            test ! -L "_site/$file"
+            chmod 0644 "_site/$file"
+          done
+
+          test "$(find _site -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 4
           test "$(find _site -mindepth 1 -maxdepth 1 | wc -l)" -eq 4
 
       - name: Upload exact Pages artifact
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # official upload-artifact v7 update
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v4 with upload-artifact v7
         with:
           path: _site
           retention-days: 1
 
       - name: Deploy public demo
         id: deployment
-        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # official Node 24 merge
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # Node 24 upstream merge
