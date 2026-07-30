@@ -3,6 +3,17 @@
 const DEMO_SOURCE = "DEMO_FIXTURE";
 const READ_ONLY_BOUNDARY = "NO_EXECUTION_PATH";
 
+const STATUS_CLASS = Object.freeze({
+  OK: "pass",
+  BOUNDARY: "boundary",
+});
+
+const SYSTEM_STATE_CLASS = Object.freeze({
+  HEALTHY: "healthy",
+  OFFLINE: "offline",
+  ABSENT: "absent",
+});
+
 const demoState = Object.freeze({
   source: DEMO_SOURCE,
   fixtureTimeUtc: "2026-07-30T16:30:00Z",
@@ -12,7 +23,9 @@ const demoState = Object.freeze({
     program: "FTMO 2-Step — Simulation",
     currentEquity: 101240,
     dailyHeadroom: 5240,
+    dailyLimit: 5000,
     overallHeadroom: 11240,
+    overallLimit: 10000,
   }),
   risk: Object.freeze({
     currentOpenRisk: 310,
@@ -20,7 +33,6 @@ const demoState = Object.freeze({
     aggregateRisk: 730,
     aggregateLimit: 1000,
     expectedCosts: 18,
-    riskUtilizationPercent: 73,
   }),
   proposal: Object.freeze({
     id: "DEMO_PROPOSAL_1042",
@@ -93,11 +105,27 @@ function createTextElement(tagName, className, value) {
   return element;
 }
 
+function boundedPercent(value, reference) {
+  if (!Number.isFinite(value) || !Number.isFinite(reference) || reference <= 0) {
+    throw new Error("invalid percentage input");
+  }
+  return Math.max(0, Math.min(100, (value / reference) * 100));
+}
+
+function mappedClass(map, key, label) {
+  const className = map[key];
+  if (typeof className !== "string") {
+    throw new Error(`unknown ${label}`);
+  }
+  return className;
+}
+
 function renderMetrics() {
+  const aggregatePercent = Math.round(boundedPercent(demoState.risk.aggregateRisk, demoState.risk.aggregateLimit));
   setText("metric-equity", currency.format(demoState.account.currentEquity));
   setText("metric-daily", currency.format(demoState.account.dailyHeadroom));
   setText("metric-overall", currency.format(demoState.account.overallHeadroom));
-  setText("metric-risk", `${demoState.risk.riskUtilizationPercent}%`);
+  setText("metric-risk", `${aggregatePercent}%`);
   setText("account-id", demoState.account.id);
   setText("account-program", demoState.account.program);
   setText("fixture-time", demoState.fixtureTimeUtc);
@@ -106,8 +134,8 @@ function renderMetrics() {
 
 function renderRiskBars() {
   const bars = [
-    ["daily-risk-bar", demoState.account.dailyHeadroom, 5000],
-    ["overall-risk-bar", demoState.account.overallHeadroom, 10000],
+    ["daily-risk-bar", demoState.account.dailyHeadroom, demoState.account.dailyLimit],
+    ["overall-risk-bar", demoState.account.overallHeadroom, demoState.account.overallLimit],
     ["aggregate-risk-bar", demoState.risk.aggregateRisk, demoState.risk.aggregateLimit],
   ];
 
@@ -116,13 +144,21 @@ function renderRiskBars() {
     if (!element) {
       continue;
     }
-    const percent = Math.max(0, Math.min(100, (value / reference) * 100));
-    element.style.width = `${percent}%`;
-    element.setAttribute("aria-valuenow", String(Math.round(percent)));
+
+    const fill = element.firstElementChild;
+    if (!fill || fill.localName !== "rect") {
+      throw new Error("invalid risk bar structure");
+    }
+
+    const percent = Math.round(boundedPercent(value, reference));
+    fill.setAttribute("width", String(percent));
+    element.setAttribute("aria-valuenow", String(percent));
   }
 
   setText("daily-headroom", currency.format(demoState.account.dailyHeadroom));
+  setText("daily-limit", currency.format(demoState.account.dailyLimit));
   setText("overall-headroom", currency.format(demoState.account.overallHeadroom));
+  setText("overall-limit", currency.format(demoState.account.overallLimit));
   setText("aggregate-risk", `${currency.format(demoState.risk.aggregateRisk)} / ${currency.format(demoState.risk.aggregateLimit)}`);
   setText("open-risk", currency.format(demoState.risk.currentOpenRisk));
   setText("proposal-risk", currency.format(demoState.risk.proposedStopRisk));
@@ -158,7 +194,7 @@ function renderChecks() {
     row.appendChild(createTextElement("td", "check-limit", check.limit));
 
     const statusCell = document.createElement("td");
-    const styleSuffix = check.status === "OK" ? "pass" : check.status.toLowerCase();
+    const styleSuffix = mappedClass(STATUS_CLASS, check.status, "check status class");
     statusCell.appendChild(createTextElement("span", `status-pill status-${styleSuffix}`, check.status));
     row.appendChild(statusCell);
     body.appendChild(row);
@@ -177,8 +213,9 @@ function renderSystems() {
 
     const header = document.createElement("div");
     header.className = "system-card-header";
+    const stateSuffix = mappedClass(SYSTEM_STATE_CLASS, system.state, "system state class");
     header.appendChild(createTextElement("h3", "system-title", system.label));
-    header.appendChild(createTextElement("span", `system-state state-${system.state.toLowerCase()}`, system.state));
+    header.appendChild(createTextElement("span", `system-state state-${stateSuffix}`, system.state));
 
     card.appendChild(header);
     card.appendChild(createTextElement("p", "system-detail", system.detail));
