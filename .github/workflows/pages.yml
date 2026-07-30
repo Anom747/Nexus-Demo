@@ -18,13 +18,15 @@ concurrency:
 jobs:
   guard:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: read
+      pull-requests: read
     steps:
-      - name: Check out public demo without persisted credentials
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - name: Check out complete history without persisted credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Enforce exact public repository boundary
@@ -38,6 +40,7 @@ jobs:
               '.nojekyll' \
               'app.js' \
               'index.html' \
+              'robots.txt' \
               'styles.css'
           } | LC_ALL=C sort)"
           actual="$(git ls-files | LC_ALL=C sort)"
@@ -48,7 +51,7 @@ jobs:
             exit 1
           fi
 
-          for file in index.html styles.css app.js .nojekyll; do
+          for file in index.html styles.css app.js robots.txt .nojekyll; do
             test -f "$file"
             test ! -L "$file"
             test "$(stat -c '%F' -- "$file")" = 'regular file'
@@ -63,13 +66,13 @@ jobs:
             local root="$1"
             local failed=0
 
-            if grep -nE 'fetch[[:space:]]*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|localStorage|sessionStorage|indexedDB|document[.]cookie|innerHTML|outerHTML|insertAdjacentHTML|eval[[:space:]]*\(|new[[:space:]]+Function|importScripts|new[[:space:]]+Worker' "$root/app.js" "$root/index.html"; then
-              echo 'Forbidden runtime API detected.'
+            if grep -nE 'fetch[[:space:]]*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|localStorage|sessionStorage|indexedDB|document[.]cookie|innerHTML|outerHTML|insertAdjacentHTML|eval[[:space:]]*\(|new[[:space:]]+Function|importScripts|new[[:space:]]+Worker|[.]style([.]|[[:space:]=])' "$root/app.js" "$root/index.html"; then
+              echo 'Forbidden runtime API or inline style mutation detected.'
               failed=1
             fi
 
-            if grep -nEi '<[^>]+[[:space:]]on[a-z]+[[:space:]]*=|javascript[[:space:]]*:' "$root/index.html"; then
-              echo 'Inline event handler or javascript URL detected.'
+            if grep -nEi '<[^>]+[[:space:]]on[a-z]+[[:space:]]*=|javascript[[:space:]]*:|<iframe|<form' "$root/index.html"; then
+              echo 'Inline handler, JavaScript URL, frame, or form detected.'
               failed=1
             fi
 
@@ -78,15 +81,83 @@ jobs:
               failed=1
             fi
 
-            grep -Fq "connect-src 'none'" "$root/index.html" || failed=1
-            grep -Fq 'name="robots"' "$root/index.html" || failed=1
+            if grep -nE '(className|classList).*toLowerCase|status[.]toLowerCase|state[.]toLowerCase' "$root/app.js"; then
+              echo 'Dynamic class derivation detected.'
+              failed=1
+            fi
+
+            local required_csp="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'none'; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; require-trusted-types-for 'script'"
+            grep -Fq "$required_csp" "$root/index.html" || failed=1
+            grep -Fq 'name="robots" content="noindex, nofollow, noarchive, nosnippet"' "$root/index.html" || failed=1
+            grep -Fq 'href="./styles.css"' "$root/index.html" || failed=1
+            grep -Fq 'src="./app.js"' "$root/index.html" || failed=1
+            grep -Fq 'Public simulation only' "$root/index.html" || failed=1
             grep -Fq 'RISK_ACCEPTABLE_NOT_EXECUTION_AUTHORIZED' "$root/app.js" || failed=1
             grep -Fq 'NO_EXECUTION_PATH' "$root/app.js" || failed=1
+            grep -Fq 'const STATUS_CLASS = Object.freeze' "$root/app.js" || failed=1
+            grep -Fq 'const SYSTEM_STATE_CLASS = Object.freeze' "$root/app.js" || failed=1
+            grep -Fq 'demoState.account.dailyLimit' "$root/app.js" || failed=1
+            grep -Fq 'demoState.account.overallLimit' "$root/app.js" || failed=1
+            printf 'User-agent: *\nDisallow: /\n' | cmp -s - "$root/robots.txt" || failed=1
 
             test "$failed" -eq 0
           }
 
           scan_runtime '.'
+
+      - name: Validate JavaScript syntax
+        shell: bash
+        run: node --check app.js
+
+      - name: Browser smoke test under CSP
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          browser="$(command -v google-chrome || command -v google-chrome-stable || command -v chromium-browser || command -v chromium || true)"
+          if [ -z "$browser" ]; then
+            echo 'No supported headless browser is installed on the runner.'
+            exit 1
+          fi
+
+          python3 -m http.server 4173 --bind 127.0.0.1 >/tmp/nexus-demo-http.log 2>&1 &
+          server_pid="$!"
+          cleanup() {
+            kill "$server_pid" 2>/dev/null || true
+          }
+          trap cleanup EXIT
+
+          ready=0
+          for attempt in {1..20}; do
+            if curl -fsS http://127.0.0.1:4173/index.html >/dev/null; then
+              ready=1
+              break
+            fi
+            sleep 0.25
+          done
+          test "$ready" -eq 1
+
+          "$browser" \
+            --headless=new \
+            --no-sandbox \
+            --disable-gpu \
+            --virtual-time-budget=3000 \
+            --dump-dom \
+            http://127.0.0.1:4173/index.html \
+            >/tmp/nexus-demo-rendered.html \
+            2>/tmp/nexus-demo-browser.log
+
+          if grep -Fq 'Refused to' /tmp/nexus-demo-browser.log; then
+            cat /tmp/nexus-demo-browser.log
+            exit 1
+          fi
+
+          grep -Fq 'status-pill status-boundary' /tmp/nexus-demo-rendered.html
+          grep -Fq 'system-state state-offline' /tmp/nexus-demo-rendered.html
+          grep -Fq 'Broker execution' /tmp/nexus-demo-rendered.html
+          grep -Fq 'aria-valuenow="73"' /tmp/nexus-demo-rendered.html
+          grep -Fq 'width="73"' /tmp/nexus-demo-rendered.html
+          curl -fsS http://127.0.0.1:4173/robots.txt | cmp -s - <(printf 'User-agent: *\nDisallow: /\n')
 
       - name: Kill T20_PUBLIC_DEPLOY_GATE_BYPASS mutant
         shell: bash
@@ -95,12 +166,12 @@ jobs:
 
           scan_runtime() {
             local root="$1"
-            ! grep -nE 'fetch[[:space:]]*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|localStorage|sessionStorage|indexedDB|document[.]cookie|innerHTML|outerHTML|insertAdjacentHTML|eval[[:space:]]*\(|new[[:space:]]+Function|importScripts|new[[:space:]]+Worker' "$root/app.js" "$root/index.html"
+            ! grep -nE 'fetch[[:space:]]*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|localStorage|sessionStorage|indexedDB|document[.]cookie|innerHTML|outerHTML|insertAdjacentHTML|eval[[:space:]]*\(|new[[:space:]]+Function|importScripts|new[[:space:]]+Worker|[.]style([.]|[[:space:]=])' "$root/app.js" "$root/index.html"
           }
 
           mutant_root="$(mktemp -d)"
           trap 'rm -rf "$mutant_root"' EXIT
-          cp -- index.html styles.css app.js "$mutant_root/"
+          cp -- index.html styles.css app.js robots.txt "$mutant_root/"
           printf '\nfetch("/T20_PUBLIC_DEPLOY_GATE_BYPASS");\n' >> "$mutant_root/app.js"
 
           if scan_runtime "$mutant_root"; then
@@ -109,6 +180,54 @@ jobs:
           fi
 
           echo 'T20_PUBLIC_DEPLOY_GATE_BYPASS killed as expected.'
+
+      - name: Install pinned Gitleaks and scan event range
+        uses: gitleaks/gitleaks-action@bcfb9cce635345aac9996cedc19b2de8e01b894f # v3
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITLEAKS_ENABLE_COMMENTS: "false"
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+          GITLEAKS_ENABLE_SUMMARY: "true"
+          GITLEAKS_VERSION: "8.24.3"
+
+      - name: Scan complete reachable Git history
+        shell: bash
+        run: gitleaks git --redact --no-banner --exit-code=2 --log-opts="--all" .
+
+      - name: Kill T21_HISTORY_LEAK_BYPASS mutant
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mutant_root="$(mktemp -d)"
+          trap 'rm -rf "$mutant_root"' EXIT
+
+          git -C "$mutant_root" init -q
+          git -C "$mutant_root" config user.name 'NEXUS Security Test'
+          git -C "$mutant_root" config user.email 'security-test@example.invalid'
+          printf 'clean\n' > "$mutant_root/README.md"
+          git -C "$mutant_root" add README.md
+          git -C "$mutant_root" commit -q -m 'clean root'
+          base_commit="$(git -C "$mutant_root" rev-parse HEAD)"
+
+          credential_prefix="$(printf 'g%s_' 'hp')"
+          credential_suffix="$(printf '%s' {A..Z} {0..9})"
+          leak_blob="$(printf 'credential=%s%s\n' "$credential_prefix" "$credential_suffix" | git -C "$mutant_root" hash-object -w --stdin)"
+          leak_tree="$(printf '100644 blob %s\tleak.txt\n' "$leak_blob" | git -C "$mutant_root" mktree)"
+          leak_commit="$(printf 'T21_HISTORY_LEAK_BYPASS\n' | git -C "$mutant_root" commit-tree "$leak_tree" -p "$base_commit")"
+          git -C "$mutant_root" update-ref refs/t21-mutant/leak "$leak_commit"
+
+          set +e
+          gitleaks git --redact --no-banner --exit-code=42 --log-opts="--all" "$mutant_root"
+          status="$?"
+          set -e
+
+          if [ "$status" -ne 42 ]; then
+            echo "T21_HISTORY_LEAK_BYPASS was not killed; exit status: $status"
+            exit 1
+          fi
+
+          echo 'T21_HISTORY_LEAK_BYPASS killed as expected.'
 
   deploy:
     needs: guard
@@ -124,12 +243,12 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Check out public demo without persisted credentials
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           persist-credentials: false
 
       - name: Configure GitHub Pages
-        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # Node 24 upstream merge
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v5
 
       - name: Stage exact public assets without symlink dereference
         shell: bash
@@ -138,7 +257,7 @@ jobs:
           rm -rf _site
           mkdir -m 0755 _site
 
-          for file in index.html styles.css app.js .nojekyll; do
+          for file in index.html styles.css app.js robots.txt .nojekyll; do
             test -f "$file"
             test ! -L "$file"
             test "$(stat -c '%F' -- "$file")" = 'regular file'
@@ -148,15 +267,15 @@ jobs:
             chmod 0644 "_site/$file"
           done
 
-          test "$(find _site -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 4
-          test "$(find _site -mindepth 1 -maxdepth 1 | wc -l)" -eq 4
+          test "$(find _site -mindepth 1 -maxdepth 1 -type f | wc -l)" -eq 5
+          test "$(find _site -mindepth 1 -maxdepth 1 | wc -l)" -eq 5
 
       - name: Upload exact Pages artifact
-        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v4 with upload-artifact v7
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v4
         with:
           path: _site
           retention-days: 1
 
       - name: Deploy public demo
         id: deployment
-        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # Node 24 upstream merge
+        uses: actions/deploy-pages@cd2ce8fcbc39b97be8ca5fce6e763baed58fa128 # v4

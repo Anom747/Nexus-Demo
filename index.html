@@ -4,9 +4,10 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="color-scheme" content="dark">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'none'; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'none'; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; require-trusted-types-for 'script'">
+  <!-- GitHub Pages does not provide repository-controlled response headers. frame-ancestors and X-Frame-Options therefore cannot be enforced here and remain a documented hosting limitation. -->
   <meta name="referrer" content="no-referrer">
-  <meta name="robots" content="noindex, nofollow">
+  <meta name="robots" content="noindex, nofollow, noarchive, nosnippet">
   <title>NEXUS — Read-only Risk Dashboard Demo</title>
   <link rel="stylesheet" href="./styles.css">
   <script src="./app.js" defer></script>
@@ -99,9 +100,9 @@
         <article class="card">
           <div class="section-head"><div><p class="eyebrow">Deterministic boundaries</p><h2>Risk posture</h2></div><span class="chip">Fixture values</span></div>
           <div class="risk-list">
-            <div class="risk-item"><div><span>Daily-loss headroom</span><strong id="daily-headroom">$5,240</strong></div><div class="bar"><i id="daily-risk-bar"></i></div><small>$0 <b>Fixture reference $5,000</b></small></div>
-            <div class="risk-item"><div><span>Overall-loss headroom</span><strong id="overall-headroom">$11,240</strong></div><div class="bar"><i id="overall-risk-bar"></i></div><small>$0 <b>Fixture reference $10,000</b></small></div>
-            <div class="risk-item"><div><span>Aggregate open risk</span><strong id="aggregate-risk">$730 / $1,000</strong></div><div class="bar caution"><i id="aggregate-risk-bar"></i></div><small>0% <b>Internal fixture cap</b></small></div>
+            <div class="risk-item"><div><span>Daily-loss headroom</span><strong id="daily-headroom">$5,240</strong></div><svg id="daily-risk-bar" class="bar" width="100%" height="7" viewBox="0 0 100 7" preserveAspectRatio="none" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><rect x="0" y="0" width="0" height="7" rx="3.5" fill="#63f2bd"></rect></svg><small>$0 <b>Fixture reference <span id="daily-limit">$5,000</span></b></small></div>
+            <div class="risk-item"><div><span>Overall-loss headroom</span><strong id="overall-headroom">$11,240</strong></div><svg id="overall-risk-bar" class="bar" width="100%" height="7" viewBox="0 0 100 7" preserveAspectRatio="none" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><rect x="0" y="0" width="0" height="7" rx="3.5" fill="#63f2bd"></rect></svg><small>$0 <b>Fixture reference <span id="overall-limit">$10,000</span></b></small></div>
+            <div class="risk-item"><div><span>Aggregate open risk</span><strong id="aggregate-risk">$730 / $1,000</strong></div><svg id="aggregate-risk-bar" class="bar caution" width="100%" height="7" viewBox="0 0 100 7" preserveAspectRatio="none" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><rect x="0" y="0" width="0" height="7" rx="3.5" fill="#ffc978"></rect></svg><small>0% <b>Internal fixture cap</b></small></div>
           </div>
           <div class="risk-summary"><div><span>Current open risk</span><strong id="open-risk">$310</strong></div><div><span>Proposed stop risk</span><strong id="proposal-risk">$420</strong></div><div><span>Expected costs</span><strong id="expected-costs">$18</strong></div></div>
         </article>
@@ -146,12 +147,12 @@
         <article class="card public-boundary">
           <p class="eyebrow">Public demo boundary</p>
           <h2>Nothing here is connected.</h2>
-          <p>This public repository contains only three static browser files. It has no access to the private NEXUS repository, MT5, n8n, email, credentials, policies, or production data.</p>
+          <p>This public repository deploys only reviewed static browser assets. It has no access to the private NEXUS repository, MT5, n8n, email, credentials, policies, or production data.</p>
           <div class="boundary-code"><span>NETWORK</span><strong>BLOCKED</strong><span>EXECUTION</span><strong>ABSENT</strong><span>DATA</span><strong>FAKE</strong></div>
         </article>
       </section>
 
-      <footer><strong>NEXUS DEMO</strong><span>Static · Fake data · No execution · No authorization</span></footer>
+      <footer><strong>NEXUS DEMO</strong><span>Public simulation only · Fake financial figures · Not investment advice · No execution or authorization</span></footer>
     </main>
   </div>
 </body>
