@@ -29,6 +29,280 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Enforce guard wiring contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - .github/workflows/pages.yml <<'PY'
+          import re
+          import sys
+
+          import yaml
+
+          path = sys.argv[1]
+          with open(path, encoding="utf-8") as handle:
+              raw = handle.read()
+          doc = yaml.safe_load(raw)
+
+          errors = []
+
+          def err(message):
+              errors.append(message)
+
+          # YAML 1.1 parses a bare `on` key as the boolean True.
+          triggers = doc.get(True)
+          if triggers is None:
+              triggers = doc.get("on")
+          if not isinstance(triggers, dict):
+              err("trigger block is missing or not a mapping")
+              triggers = {}
+          if "pull_request_target" in triggers:
+              err("pull_request_target trigger is forbidden")
+          for required_trigger in ("pull_request", "push", "workflow_dispatch"):
+              if required_trigger not in triggers:
+                  err("required trigger removed: %s" % required_trigger)
+
+          if doc.get("permissions") != {}:
+              err("top-level permissions must be an explicit empty mapping")
+
+          jobs = doc.get("jobs")
+          if not isinstance(jobs, dict):
+              err("jobs block is missing")
+              jobs = {}
+
+          guard = jobs.get("guard")
+          if not isinstance(guard, dict):
+              err("job 'guard' is missing or renamed")
+              guard = {}
+
+          deploy = jobs.get("deploy")
+          if not isinstance(deploy, dict):
+              err("job 'deploy' is missing or renamed")
+              deploy = {}
+
+          needs = deploy.get("needs")
+          if isinstance(needs, str):
+              needs_list = [needs]
+          elif isinstance(needs, list):
+              needs_list = list(needs)
+          else:
+              needs_list = []
+          if "guard" not in needs_list:
+              err("deploy must declare needs: guard")
+
+          EXPECTED_IF = (
+              "github.ref == 'refs/heads/main' "
+              "&& (github.event_name == 'push' "
+              "|| github.event_name == 'workflow_dispatch')"
+          )
+          if str(deploy.get("if", "")).strip() != EXPECTED_IF:
+              err("deploy condition must exactly match the reviewed push/dispatch guard")
+
+          def steps_with(job, token):
+              found = []
+              for step in job.get("steps") or []:
+                  if token in (step.get("run") or ""):
+                      found.append(step)
+              return found
+
+          # The sentinel names are assembled from fragments so that this contract,
+          # which is itself a step body in this same file, never matches itself.
+          P = "NEXUS_" + "WIRING_"
+          REQUIRED_SENTINELS = {
+              P + "MATERIALIZE": None,
+              P + "RUNTIME_REAL": '"$NEXUS_GUARD_RUNTIME" "$GITHUB_WORKSPACE"',
+              P + "HISTORY_REAL": '"$NEXUS_GUARD_HISTORY" "$GITHUB_WORKSPACE"',
+              P + "RUNTIME_MUTANT": '"$NEXUS_GUARD_RUNTIME" "$mutant_root"',
+              P + "HISTORY_MUTANT": '"$NEXUS_GUARD_HISTORY" "$mutant_root"',
+          }
+
+          sentinel_steps = {}
+          for sentinel in sorted(REQUIRED_SENTINELS):
+              required_invocation = REQUIRED_SENTINELS[sentinel]
+              matches = steps_with(guard, sentinel)
+              if len(matches) != 1:
+                  err("expected exactly one guard step carrying %s, found %d" % (sentinel, len(matches)))
+                  continue
+              sentinel_steps[sentinel] = matches[0]
+              body = matches[0].get("run") or ""
+              if required_invocation is not None and required_invocation not in body:
+                  err("step %s must invoke the canonical implementation as %s" % (sentinel, required_invocation))
+
+          # The mutants must exercise the canonical implementations, never a private copy.
+          for mutant_sentinel in (P + "RUNTIME_MUTANT", P + "HISTORY_MUTANT"):
+              step = sentinel_steps.get(mutant_sentinel)
+              if step is None:
+                  continue
+              if "grep -nE" in (step.get("run") or ""):
+                  err("%s must not define its own detector regex" % mutant_sentinel)
+
+          # Single source of truth: the forbidden-API detector and the history
+          # scanner must each exist exactly once in this workflow. The probes are
+          # concatenated so that this contract does not match itself.
+          runtime_probe = "XMLHttp" + "Request|Web" + "Socket"
+          if raw.count(runtime_probe) != 1:
+              err("forbidden-API regex must appear exactly once, found %d" % raw.count(runtime_probe))
+
+          history_probe = "gitleaks" + " git "
+          if raw.count(history_probe) != 1:
+              err("history scanner invocation must appear exactly once, found %d" % raw.count(history_probe))
+
+          for job_name in sorted(jobs):
+              job = jobs[job_name]
+              if not isinstance(job, dict):
+                  continue
+              for step in job.get("steps") or []:
+                  uses = step.get("uses")
+                  if not uses:
+                      continue
+                  ref = uses.rsplit("@", 1)[-1]
+                  if not re.fullmatch(r"[0-9a-f]{40}", ref):
+                      err("%s: action not pinned to a 40-character SHA: %s" % (job_name, uses))
+                  if "actions/checkout" in uses:
+                      with_block = step.get("with") or {}
+                      if with_block.get("persist-credentials") is not False:
+                          err("%s: checkout must set persist-credentials: false" % job_name)
+
+          if errors:
+              print("Guard wiring contract FAILED:")
+              for message in errors:
+                  print("  - %s" % message)
+              raise SystemExit(1)
+
+          print("Guard wiring contract passed.")
+          PY
+
+      - name: Materialize canonical guard implementations
+        shell: bash
+        run: |
+          # NEXUS_WIRING_MATERIALIZE
+          set -euo pipefail
+
+          cat > "$RUNNER_TEMP/nexus_guard_runtime.sh" <<'SH'
+          #!/usr/bin/env bash
+          # Canonical NEXUS public runtime boundary scanner.
+          # This is the only implementation. The real guard step and the
+          # T20_PUBLIC_DEPLOY_GATE_BYPASS mutant both invoke this file, so a passing
+          # repository and a killed mutant are decided by exactly the same code.
+          set -uo pipefail
+
+          root="${1:?usage: nexus_guard_runtime.sh <root>}"
+          failed=0
+
+          for asset in index.html styles.css app.js robots.txt; do
+            if [ ! -f "$root/$asset" ] || [ -L "$root/$asset" ]; then
+              echo "Missing or non-regular runtime asset: $asset"
+              failed=1
+            fi
+          done
+          if [ "$failed" -ne 0 ]; then
+            exit 1
+          fi
+
+          # Fail closed on scanner errors: a grep exit status of 2 or more means the
+          # pattern could not be evaluated, which must never read as "no violation".
+          matched() {
+            local pattern="$1"
+            shift
+            local output status
+            output="$(grep -nE "$pattern" "$@" 2>&1)"
+            status=$?
+            if [ "$status" -ge 2 ]; then
+              echo "Scanner error while evaluating pattern: $output"
+              exit 3
+            fi
+            if [ "$status" -eq 0 ]; then
+              printf '%s\n' "$output"
+              return 0
+            fi
+            return 1
+          }
+
+          matched_ignorecase() {
+            local pattern="$1"
+            shift
+            local output status
+            output="$(grep -nEi "$pattern" "$@" 2>&1)"
+            status=$?
+            if [ "$status" -ge 2 ]; then
+              echo "Scanner error while evaluating pattern: $output"
+              exit 3
+            fi
+            if [ "$status" -eq 0 ]; then
+              printf '%s\n' "$output"
+              return 0
+            fi
+            return 1
+          }
+
+          if matched 'fetch[[:space:]]*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|localStorage|sessionStorage|indexedDB|document[.]cookie|innerHTML|outerHTML|insertAdjacentHTML|eval[[:space:]]*\(|new[[:space:]]+Function|importScripts|new[[:space:]]+Worker|[.]style([.]|[[:space:]=])' "$root/app.js" "$root/index.html"; then
+            echo 'Forbidden runtime API or inline style mutation detected.'
+            failed=1
+          fi
+
+          if matched_ignorecase '<[^>]+[[:space:]]on[a-z]+[[:space:]]*=|javascript[[:space:]]*:|<iframe|<form' "$root/index.html"; then
+            echo 'Inline handler, JavaScript URL, frame, or form detected.'
+            failed=1
+          fi
+
+          if matched_ignorecase 'https?://' "$root/app.js" "$root/styles.css"; then
+            echo 'External origin detected in runtime assets.'
+            failed=1
+          fi
+
+          if matched '(className|classList).*toLowerCase|status[.]toLowerCase|state[.]toLowerCase' "$root/app.js"; then
+            echo 'Dynamic class derivation detected.'
+            failed=1
+          fi
+
+          required_csp="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'none'; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; require-trusted-types-for 'script'"
+
+          assert_contains() {
+            if ! grep -Fq "$2" "$1"; then
+              echo "Required content missing from $1: $2"
+              failed=1
+            fi
+          }
+
+          assert_contains "$root/index.html" "$required_csp"
+          assert_contains "$root/index.html" 'name="robots" content="noindex, nofollow, noarchive, nosnippet"'
+          assert_contains "$root/index.html" 'href="./styles.css"'
+          assert_contains "$root/index.html" 'src="./app.js"'
+          assert_contains "$root/index.html" 'Public simulation only'
+          assert_contains "$root/app.js" 'RISK_ACCEPTABLE_NOT_EXECUTION_AUTHORIZED'
+          assert_contains "$root/app.js" 'NO_EXECUTION_PATH'
+          assert_contains "$root/app.js" 'const STATUS_CLASS = Object.freeze'
+          assert_contains "$root/app.js" 'const SYSTEM_STATE_CLASS = Object.freeze'
+          assert_contains "$root/app.js" 'demoState.account.dailyLimit'
+          assert_contains "$root/app.js" 'demoState.account.overallLimit'
+
+          if ! printf 'User-agent: *\nDisallow: /\n' | cmp -s - "$root/robots.txt"; then
+            echo 'robots.txt does not match the required exact content.'
+            failed=1
+          fi
+
+          exit "$failed"
+          SH
+
+          cat > "$RUNNER_TEMP/nexus_guard_history.sh" <<'SH'
+          #!/usr/bin/env bash
+          # Canonical NEXUS full reachable-history secret scanner.
+          # This is the only implementation. The real history scan and the
+          # T21_HISTORY_LEAK_BYPASS mutant both invoke this file.
+          # Exit codes: 0 = clean, 2 = secret detected, anything else = tool error.
+          set -uo pipefail
+
+          target="${1:?usage: nexus_guard_history.sh <repo>}"
+          gitleaks git --redact --no-banner --exit-code=2 --log-opts="--all" "$target"
+          SH
+
+          chmod 0755 "$RUNNER_TEMP/nexus_guard_runtime.sh" "$RUNNER_TEMP/nexus_guard_history.sh"
+          test -x "$RUNNER_TEMP/nexus_guard_runtime.sh"
+          test -x "$RUNNER_TEMP/nexus_guard_history.sh"
+
+          echo "NEXUS_GUARD_RUNTIME=$RUNNER_TEMP/nexus_guard_runtime.sh" >> "$GITHUB_ENV"
+          echo "NEXUS_GUARD_HISTORY=$RUNNER_TEMP/nexus_guard_history.sh" >> "$GITHUB_ENV"
+
       - name: Enforce exact public repository boundary
         shell: bash
         run: |
@@ -60,50 +334,9 @@ jobs:
       - name: Enforce read-only browser boundary
         shell: bash
         run: |
+          # NEXUS_WIRING_RUNTIME_REAL
           set -euo pipefail
-
-          scan_runtime() {
-            local root="$1"
-            local failed=0
-
-            if grep -nE 'fetch[[:space:]]*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|localStorage|sessionStorage|indexedDB|document[.]cookie|innerHTML|outerHTML|insertAdjacentHTML|eval[[:space:]]*\(|new[[:space:]]+Function|importScripts|new[[:space:]]+Worker|[.]style([.]|[[:space:]=])' "$root/app.js" "$root/index.html"; then
-              echo 'Forbidden runtime API or inline style mutation detected.'
-              failed=1
-            fi
-
-            if grep -nEi '<[^>]+[[:space:]]on[a-z]+[[:space:]]*=|javascript[[:space:]]*:|<iframe|<form' "$root/index.html"; then
-              echo 'Inline handler, JavaScript URL, frame, or form detected.'
-              failed=1
-            fi
-
-            if grep -nEi 'https?://' "$root/app.js" "$root/styles.css"; then
-              echo 'External origin detected in runtime assets.'
-              failed=1
-            fi
-
-            if grep -nE '(className|classList).*toLowerCase|status[.]toLowerCase|state[.]toLowerCase' "$root/app.js"; then
-              echo 'Dynamic class derivation detected.'
-              failed=1
-            fi
-
-            local required_csp="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'none'; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; worker-src 'none'; manifest-src 'none'; form-action 'none'; base-uri 'none'; require-trusted-types-for 'script'"
-            grep -Fq "$required_csp" "$root/index.html" || failed=1
-            grep -Fq 'name="robots" content="noindex, nofollow, noarchive, nosnippet"' "$root/index.html" || failed=1
-            grep -Fq 'href="./styles.css"' "$root/index.html" || failed=1
-            grep -Fq 'src="./app.js"' "$root/index.html" || failed=1
-            grep -Fq 'Public simulation only' "$root/index.html" || failed=1
-            grep -Fq 'RISK_ACCEPTABLE_NOT_EXECUTION_AUTHORIZED' "$root/app.js" || failed=1
-            grep -Fq 'NO_EXECUTION_PATH' "$root/app.js" || failed=1
-            grep -Fq 'const STATUS_CLASS = Object.freeze' "$root/app.js" || failed=1
-            grep -Fq 'const SYSTEM_STATE_CLASS = Object.freeze' "$root/app.js" || failed=1
-            grep -Fq 'demoState.account.dailyLimit' "$root/app.js" || failed=1
-            grep -Fq 'demoState.account.overallLimit' "$root/app.js" || failed=1
-            printf 'User-agent: *\nDisallow: /\n' | cmp -s - "$root/robots.txt" || failed=1
-
-            test "$failed" -eq 0
-          }
-
-          scan_runtime '.'
+          "$NEXUS_GUARD_RUNTIME" "$GITHUB_WORKSPACE"
 
       - name: Validate JavaScript syntax
         shell: bash
@@ -162,19 +395,15 @@ jobs:
       - name: Kill T20_PUBLIC_DEPLOY_GATE_BYPASS mutant
         shell: bash
         run: |
+          # NEXUS_WIRING_RUNTIME_MUTANT
           set -euo pipefail
-
-          scan_runtime() {
-            local root="$1"
-            ! grep -nE 'fetch[[:space:]]*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|localStorage|sessionStorage|indexedDB|document[.]cookie|innerHTML|outerHTML|insertAdjacentHTML|eval[[:space:]]*\(|new[[:space:]]+Function|importScripts|new[[:space:]]+Worker|[.]style([.]|[[:space:]=])' "$root/app.js" "$root/index.html"
-          }
 
           mutant_root="$(mktemp -d)"
           trap 'rm -rf "$mutant_root"' EXIT
           cp -- index.html styles.css app.js robots.txt "$mutant_root/"
           printf '\nfetch("/T20_PUBLIC_DEPLOY_GATE_BYPASS");\n' >> "$mutant_root/app.js"
 
-          if scan_runtime "$mutant_root"; then
+          if "$NEXUS_GUARD_RUNTIME" "$mutant_root"; then
             echo 'T20_PUBLIC_DEPLOY_GATE_BYPASS survived.'
             exit 1
           fi
@@ -192,11 +421,15 @@ jobs:
 
       - name: Scan complete reachable Git history
         shell: bash
-        run: gitleaks git --redact --no-banner --exit-code=2 --log-opts="--all" .
+        run: |
+          # NEXUS_WIRING_HISTORY_REAL
+          set -euo pipefail
+          "$NEXUS_GUARD_HISTORY" "$GITHUB_WORKSPACE"
 
       - name: Kill T21_HISTORY_LEAK_BYPASS mutant
         shell: bash
         run: |
+          # NEXUS_WIRING_HISTORY_MUTANT
           set -euo pipefail
 
           mutant_root="$(mktemp -d)"
@@ -219,11 +452,11 @@ jobs:
           git -C "$mutant_root" update-ref refs/t21-mutant/leak "$leak_commit"
 
           set +e
-          gitleaks git --redact --no-banner --exit-code=42 --log-opts="--all" "$mutant_root"
+          "$NEXUS_GUARD_HISTORY" "$mutant_root"
           status="$?"
           set -e
 
-          if [ "$status" -ne 42 ]; then
+          if [ "$status" -ne 2 ]; then
             echo "T21_HISTORY_LEAK_BYPASS was not killed; exit status: $status"
             exit 1
           fi
