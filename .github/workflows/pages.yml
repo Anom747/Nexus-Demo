@@ -94,7 +94,7 @@ jobs:
             return 1
           }
 
-          if matched 'fetch[[:space:]]*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|localStorage|sessionStorage|indexedDB|document[.]cookie|innerHTML|outerHTML|insertAdjacentHTML|eval[[:space:]]*\(|new[[:space:]]+Function|importScripts|new[[:space:]]+Worker|[.]style([.]|[[:space:]=])' "$root/app.js" "$root/index.html"; then
+          if matched 'fetch[[:space:]]*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|localStorage|sessionStorage|indexedDB|document[.]cookie|innerHTML|outerHTML|insertAdjacentHTML|eval[[:space:]]*\(|new[[:space:]]+Function|importScripts|(^|[^a-zA-Z0-9_.])import[[:space:]]*\(|caches[.]|serviceWorker|new[[:space:]]+Worker|[.]style([.]|[[:space:]=])' "$root/app.js" "$root/index.html"; then
             echo 'Forbidden runtime API or inline style mutation detected.'
             failed=1
           fi
@@ -104,7 +104,17 @@ jobs:
             failed=1
           fi
 
-          if matched_ignorecase 'https?://' "$root/app.js" "$root/styles.css"; then
+          # External origins must also be rejected in index.html: the tracked-file
+          # allowlist requires the correct relative references to be present but
+          # does not forbid an additional <script src> or <link href>. Protocol-
+          # relative references such as src="//cdn.example.invalid/x.js" never
+          # match an https?:// pattern and are therefore matched separately.
+          quote="[\"']"
+          external_pattern="https?://"
+          external_pattern="$external_pattern|(src|href)[[:space:]]*=[[:space:]]*${quote}?//"
+          external_pattern="$external_pattern|url\\([[:space:]]*${quote}?//"
+          external_pattern="$external_pattern|@import[[:space:]]*${quote}?//"
+          if matched_ignorecase "$external_pattern" "$root/app.js" "$root/styles.css" "$root/index.html"; then
             echo 'External origin detected in runtime assets.'
             failed=1
           fi
@@ -368,6 +378,9 @@ jobs:
               "eval[[:space:]]*\\(",
               "new[[:space:]]+Function",
               "importScripts",
+              "import[[:space:]]*\\(",
+              "caches[.]",
+              "serviceWorker",
               "new[[:space:]]+Worker",
               "[.]style",
           )
@@ -727,6 +740,16 @@ jobs:
           run_case 'form'                 index.html '<form action="/x"></form>'         1
           run_case 'javascript URL'       index.html '<a href="javascript:x()">x</a>'    1
           run_case 'external origin in app.js' app.js '/* https://cdn.example.invalid */' 1
+
+          # T-24 cases: origins reachable from index.html, protocol-relative
+          # references, and the three runtime APIs the first pattern missed.
+          run_case 'N1 external https in index.html'        index.html '<script src="https://cdn.example.invalid/x.js"></script>'  1
+          run_case 'N2 protocol-relative href in index.html' index.html '<link rel="stylesheet" href="//cdn.example.invalid/x.css">' 1
+          run_case 'N3 protocol-relative @import in css'    styles.css '@import "//cdn.example.invalid/x.css";'                    1
+          run_case 'N4 protocol-relative url() in css'      styles.css '.x { background: url(//cdn.example.invalid/i.png); }'      1
+          run_case 'N5 dynamic import()'                    app.js     'import("./payload.js");'                                  1
+          run_case 'N6 Cache API'                           app.js     'caches.open("nexus");'                                    1
+          run_case 'N7 service worker registration'         app.js     'navigator.serviceWorker.register("/sw.js");'              1
 
           # A scanner error must never be reported as a finding. The canonical
           # scanner exits 3 when a pattern cannot be evaluated.
