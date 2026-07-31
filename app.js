@@ -2,79 +2,141 @@
 
 const DEMO_SOURCE = "DEMO_FIXTURE";
 const READ_ONLY_BOUNDARY = "NO_EXECUTION_PATH";
+const FUTURE_POSITIVE_DECISION = "RISK_ACCEPTABLE_NOT_EXECUTION_AUTHORIZED";
 
 const STATUS_CLASS = Object.freeze({
-  OK: "pass",
-  BOUNDARY: "boundary",
+  ANALYZED: "analyzed",
+  WATCHLIST: "watch",
+  RISK_BLOCKED: "blocked",
+  OPEN_MANUAL: "open",
+  CLOSED: "closed",
+  DRAFT: "draft",
 });
 
 const SYSTEM_STATE_CLASS = Object.freeze({
   HEALTHY: "healthy",
-  OFFLINE: "offline",
+  BLOCKED: "blocked",
   ABSENT: "absent",
+  PREVIEW: "preview",
+});
+
+const VIEW_COPY = Object.freeze({
+  overview: Object.freeze({
+    eyebrow: "Workspace overview",
+    title: "Your trading workspace.",
+    subtitle: "Recommendations, manual trades, journal notes, and safety status in one controlled interface.",
+  }),
+  recommendations: Object.freeze({
+    eyebrow: "Decision support",
+    title: "Recommendations without hidden authority.",
+    subtitle: "Every material change creates a new version. Analysis never overrides a safety block.",
+  }),
+  trades: Object.freeze({
+    eyebrow: "Manual records",
+    title: "What the operator reported.",
+    subtitle: "No trade in this preview is broker-confirmed, reconciled, or automatically executed.",
+  }),
+  journal: Object.freeze({
+    eyebrow: "Review and learning",
+    title: "A journal tied to evidence.",
+    subtitle: "Notes remain editable context. Safety facts stay immutable and separate.",
+  }),
+  system: Object.freeze({
+    eyebrow: "Fail-closed posture",
+    title: "The system says what is missing.",
+    subtitle: "Unavailable dependencies remain blocked instead of being replaced with simulated trust.",
+  }),
 });
 
 const demoState = Object.freeze({
   source: DEMO_SOURCE,
-  fixtureTimeUtc: "2026-07-30T16:30:00Z",
-  mode: "READ_ONLY_DEMO",
+  fixtureTimeUtc: "2026-07-31T01:00:00Z",
+  boundary: READ_ONLY_BOUNDARY,
+  activeDecision: "PAPER_EVIDENCE_MODE_NOT_IMPLEMENTED",
+  futurePositiveDecision: FUTURE_POSITIVE_DECISION,
   account: Object.freeze({
     id: "DEMO_ACCOUNT_001",
-    program: "FTMO 2-Step — Simulation",
-    currentEquity: 101240,
-    dailyHeadroom: 5240,
-    dailyLimit: 5000,
-    overallHeadroom: 11240,
-    overallLimit: 10000,
+    currentEquity: "101240",
+    dailyHeadroom: "5240",
+    dailyLimit: "5000",
+    overallHeadroom: "11240",
+    overallLimit: "10000",
   }),
-  risk: Object.freeze({
-    currentOpenRisk: 310,
-    proposedStopRisk: 420,
-    aggregateRisk: 730,
-    aggregateLimit: 1000,
-    expectedCosts: 18,
-  }),
-  proposal: Object.freeze({
-    id: "DEMO_PROPOSAL_1042",
-    symbol: "EURUSD",
-    side: "LONG",
-    entry: 1.08342,
-    stop: 1.07992,
-    takeProfit: 1.09042,
-    volume: 1.2,
-    expectedStopLoss: 420,
-    riskReward: 2.0,
-    validUntilUtc: "2026-07-30T16:40:00Z",
-  }),
-  decision: Object.freeze({
-    value: "RISK_ACCEPTABLE_NOT_EXECUTION_AUTHORIZED",
-    policy: "ftmo-2step-reference / 2026-07-29.2",
-    decisionHash: "4d16…b9f2",
-  }),
-  checks: Object.freeze([
-    Object.freeze({ name: "Input validation", actual: "Canonical and bounded", limit: "Strict schema", status: "OK" }),
-    Object.freeze({ name: "Account / policy binding", actual: "Exact fixture match", limit: "Exact match", status: "OK" }),
-    Object.freeze({ name: "Policy content binding", actual: "Canonical hash bound", limit: "Signed content", status: "OK" }),
-    Object.freeze({ name: "Specification freshness", actual: "10 seconds", limit: "≤ 300 seconds", status: "OK" }),
-    Object.freeze({ name: "Market snapshot freshness", actual: "5 seconds", limit: "≤ 60 seconds", status: "OK" }),
-    Object.freeze({ name: "Position recomputation", actual: "All fields match", limit: "Exact deterministic result", status: "OK" }),
-    Object.freeze({ name: "Daily loss boundary", actual: "$101,240", limit: "> $96,000", status: "OK" }),
-    Object.freeze({ name: "Overall loss boundary", actual: "$101,240", limit: "> $90,000", status: "OK" }),
-    Object.freeze({ name: "Aggregate open risk", actual: "$730", limit: "≤ $1,000", status: "OK" }),
-    Object.freeze({ name: "Kill switch", actual: "Inactive", limit: "Must be inactive", status: "OK" }),
-    Object.freeze({ name: "Broker execution", actual: "Absent by design", limit: "No browser path", status: "BOUNDARY" }),
+  recommendations: Object.freeze([
+    Object.freeze({
+      id: "REC-DEMO-1042-V3",
+      mark: "EU",
+      symbol: "EURUSD",
+      side: "LONG",
+      setup: "London continuation",
+      status: "ANALYZED",
+      entry: "1.08342",
+      stop: "1.07992",
+      target: "1.09042",
+      source: "DEMO_FIXTURE",
+      risk: "NOT_EVALUATED",
+      validity: "10 minutes",
+      thesis: "Fake momentum continuation above a simulated intraday level.",
+      counter: "Fixture liquidity is unverified and the safety path is intentionally blocked.",
+    }),
+    Object.freeze({
+      id: "REC-DEMO-1077-V1",
+      mark: "XU",
+      symbol: "XAUUSD",
+      side: "SHORT",
+      setup: "Failed breakout",
+      status: "RISK_BLOCKED",
+      entry: "2388.40",
+      stop: "2396.10",
+      target: "2373.00",
+      source: "DEMO_FIXTURE",
+      risk: "PAPER_EVIDENCE_MODE_NOT_IMPLEMENTED",
+      validity: "Expired",
+      thesis: "Fake rejection from a simulated resistance zone.",
+      counter: "The source is not authenticated MT5 evidence and cannot support a positive result.",
+    }),
+    Object.freeze({
+      id: "REC-DEMO-1091-V2",
+      mark: "NU",
+      symbol: "NAS100",
+      side: "LONG",
+      setup: "Opening range watch",
+      status: "WATCHLIST",
+      entry: "18842.0",
+      stop: "18766.0",
+      target: "18994.0",
+      source: "DEMO_FIXTURE",
+      risk: "NOT_REQUESTED",
+      validity: "28 minutes",
+      thesis: "Fake continuation candidate if the simulated opening range holds.",
+      counter: "Volatility and symbol specification are display fixtures only.",
+    }),
+  ]),
+  trades: Object.freeze([
+    Object.freeze({ symbol: "EURUSD", side: "LONG", entry: "1.08115", result: "+1.8R", status: "CLOSED", reconciliation: "OPERATOR_REPORTED" }),
+    Object.freeze({ symbol: "GBPUSD", side: "SHORT", entry: "1.27640", result: "+0.4R", status: "OPEN_MANUAL", reconciliation: "UNKNOWN" }),
+    Object.freeze({ symbol: "NAS100", side: "LONG", entry: "18821.0", result: "—", status: "DRAFT", reconciliation: "NOT_APPLICABLE" }),
+    Object.freeze({ symbol: "XAUUSD", side: "SHORT", entry: "2391.80", result: "-1.0R", status: "CLOSED", reconciliation: "OPERATOR_REPORTED" }),
+  ]),
+  journal: Object.freeze([
+    Object.freeze({ time: "31 JUL · 01:06Z", title: "Waited for confirmation", detail: "Did not chase the first fake EURUSD impulse. Entry plan remained unchanged.", tags: Object.freeze(["discipline", "entry-plan"]) }),
+    Object.freeze({ time: "30 JUL · 18:44Z", title: "Stopped after the block", detail: "Risk state stayed blocked. No attempt was made to relabel fixture data as authenticated.", tags: Object.freeze(["safety", "process"]) }),
+    Object.freeze({ time: "30 JUL · 15:20Z", title: "Late exit review", detail: "Operator-reported close was later than the written plan. Add a clearer invalidation note next time.", tags: Object.freeze(["exit", "mistake"]) }),
+    Object.freeze({ time: "29 JUL · 11:10Z", title: "Good no-trade decision", detail: "Skipped an unverified setup when the simulated source facts contradicted each other.", tags: Object.freeze(["no-trade", "data-quality"]) }),
+  ]),
+  pipeline: Object.freeze([
+    Object.freeze({ state: "DONE", title: "B1 architecture", detail: "B1-01 through B1-07 merged." }),
+    Object.freeze({ state: "CURRENT", title: "App shell preview", detail: "Public read-only interface available." }),
+    Object.freeze({ state: "PENDING", title: "B1-PRE-01", detail: "Explicit PAPER evidence mode requires independent safety review." }),
+    Object.freeze({ state: "PENDING", title: "Backend implementation", detail: "API, database, auth, and gateway remain separate PRs." }),
   ]),
   systems: Object.freeze([
-    Object.freeze({ label: "Risk Vault", detail: "Deterministic checks available", state: "HEALTHY" }),
-    Object.freeze({ label: "Policy governance", detail: "Reference policy hash verified", state: "HEALTHY" }),
-    Object.freeze({ label: "MT5 connection", detail: "Not connected in demo", state: "OFFLINE" }),
-    Object.freeze({ label: "Order execution", detail: "Module intentionally absent", state: "ABSENT" }),
-  ]),
-  audit: Object.freeze([
-    Object.freeze({ time: "16:30:00Z", title: "Fixture loaded", detail: "Static DEMO_FIXTURE data initialized." }),
-    Object.freeze({ time: "16:30:00Z", title: "Policy selected", detail: "Reference 2-Step policy displayed for simulation." }),
-    Object.freeze({ time: "16:30:01Z", title: "Position recomputed", detail: "Sample result matched the displayed proposal." }),
-    Object.freeze({ time: "16:30:01Z", title: "Risk decision rendered", detail: "No authorization or side effect was created." }),
+    Object.freeze({ label: "Public app shell", detail: "Static browser-only preview with fake records.", state: "PREVIEW" }),
+    Object.freeze({ label: "B1 specifications", detail: "Architecture sequence B1-01 through B1-07 merged.", state: "HEALTHY" }),
+    Object.freeze({ label: "Safety Gateway", detail: "No runtime connection in the public preview.", state: "BLOCKED" }),
+    Object.freeze({ label: "PAPER evidence mode", detail: "B1-PRE-01 is not implemented.", state: "BLOCKED" }),
+    Object.freeze({ label: "MT5 provenance", detail: "No live or authenticated MT5 source exists.", state: "ABSENT" }),
+    Object.freeze({ label: "Broker execution", detail: "No order module, endpoint, or network path exists.", state: "ABSENT" }),
   ]),
 });
 
@@ -82,11 +144,6 @@ const currency = new Intl.NumberFormat("en-US", {
   style: "currency",
   currency: "USD",
   maximumFractionDigits: 0,
-});
-
-const price = new Intl.NumberFormat("en-US", {
-  minimumFractionDigits: 5,
-  maximumFractionDigits: 5,
 });
 
 function setText(id, value) {
@@ -105,13 +162,6 @@ function createTextElement(tagName, className, value) {
   return element;
 }
 
-function boundedPercent(value, reference) {
-  if (!Number.isFinite(value) || !Number.isFinite(reference) || reference <= 0) {
-    throw new Error("invalid percentage input");
-  }
-  return Math.max(0, Math.min(100, (value / reference) * 100));
-}
-
 function mappedClass(map, key, label) {
   const className = map[key];
   if (typeof className !== "string") {
@@ -120,84 +170,172 @@ function mappedClass(map, key, label) {
   return className;
 }
 
-function renderMetrics() {
-  const aggregatePercent = Math.round(boundedPercent(demoState.risk.aggregateRisk, demoState.risk.aggregateLimit));
-  setText("metric-equity", currency.format(demoState.account.currentEquity));
-  setText("metric-daily", currency.format(demoState.account.dailyHeadroom));
-  setText("metric-overall", currency.format(demoState.account.overallHeadroom));
-  setText("metric-risk", `${aggregatePercent}%`);
-  setText("account-id", demoState.account.id);
-  setText("account-program", demoState.account.program);
-  setText("fixture-time", demoState.fixtureTimeUtc);
-  setText("fixture-source", demoState.source);
+function formatCurrency(value) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error("invalid display-only currency value");
+  }
+  return currency.format(parsed);
 }
 
-function renderRiskBars() {
-  const bars = [
-    ["daily-risk-bar", demoState.account.dailyHeadroom, demoState.account.dailyLimit],
-    ["overall-risk-bar", demoState.account.overallHeadroom, demoState.account.overallLimit],
-    ["aggregate-risk-bar", demoState.risk.aggregateRisk, demoState.risk.aggregateLimit],
-  ];
+function createStatusPill(status) {
+  const suffix = mappedClass(STATUS_CLASS, status, "status class");
+  return createTextElement("span", `status-pill status-${suffix}`, status);
+}
 
-  for (const [id, value, reference] of bars) {
-    const element = document.getElementById(id);
-    if (!element) {
-      continue;
-    }
+function recommendationCopy(recommendation) {
+  const copy = document.createElement("div");
+  copy.className = "recommendation-copy";
+  copy.appendChild(createTextElement("strong", "", `${recommendation.symbol} · ${recommendation.side}`));
+  copy.appendChild(createTextElement("span", "", recommendation.setup));
+  return copy;
+}
 
-    const fill = element.firstElementChild;
-    if (!fill || fill.localName !== "rect") {
-      throw new Error("invalid risk bar structure");
-    }
+function renderOverview() {
+  setText("fixture-source", demoState.source);
+  setText("fixture-time", demoState.fixtureTimeUtc);
+  setText("account-id", demoState.account.id);
+  setText("metric-equity", formatCurrency(demoState.account.currentEquity));
+  setText("metric-daily", formatCurrency(demoState.account.dailyHeadroom));
+  setText("metric-overall", formatCurrency(demoState.account.overallHeadroom));
+  setText("metric-open-trades", demoState.trades.filter((trade) => trade.status === "OPEN_MANUAL").length);
+  setText("metric-recommendations", demoState.recommendations.length);
+  setText("active-decision", demoState.activeDecision);
+  setText("future-positive-label", demoState.futurePositiveDecision);
 
-    const percent = Math.round(boundedPercent(value, reference));
-    fill.setAttribute("width", String(percent));
-    element.setAttribute("aria-valuenow", String(percent));
+  const dailyReference = demoState.account.dailyLimit;
+  const overallReference = demoState.account.overallLimit;
+  if (!dailyReference || !overallReference) {
+    throw new Error("demo account limits are required");
   }
 
-  setText("daily-headroom", currency.format(demoState.account.dailyHeadroom));
-  setText("daily-limit", currency.format(demoState.account.dailyLimit));
-  setText("overall-headroom", currency.format(demoState.account.overallHeadroom));
-  setText("overall-limit", currency.format(demoState.account.overallLimit));
-  setText("aggregate-risk", `${currency.format(demoState.risk.aggregateRisk)} / ${currency.format(demoState.risk.aggregateLimit)}`);
-  setText("open-risk", currency.format(demoState.risk.currentOpenRisk));
-  setText("proposal-risk", currency.format(demoState.risk.proposedStopRisk));
-  setText("expected-costs", currency.format(demoState.risk.expectedCosts));
+  const container = document.getElementById("overview-recommendations");
+  if (container) {
+    for (const recommendation of demoState.recommendations) {
+      const card = document.createElement("article");
+      card.className = "recommendation-card";
+      card.appendChild(createTextElement("div", "symbol-mark", recommendation.mark));
+      card.appendChild(recommendationCopy(recommendation));
+      card.appendChild(createStatusPill(recommendation.status));
+      container.appendChild(card);
+    }
+  }
 }
 
-function renderProposal() {
-  setText("proposal-id", demoState.proposal.id);
-  setText("proposal-symbol", demoState.proposal.symbol);
-  setText("proposal-side", demoState.proposal.side);
-  setText("proposal-entry", price.format(demoState.proposal.entry));
-  setText("proposal-stop", price.format(demoState.proposal.stop));
-  setText("proposal-target", price.format(demoState.proposal.takeProfit));
-  setText("proposal-volume", `${demoState.proposal.volume.toFixed(2)} lots`);
-  setText("proposal-loss", currency.format(demoState.proposal.expectedStopLoss));
-  setText("proposal-rr", `${demoState.proposal.riskReward.toFixed(1)}R`);
-  setText("proposal-valid-until", demoState.proposal.validUntilUtc);
-  setText("decision-value", demoState.decision.value);
-  setText("decision-policy", demoState.decision.policy);
-  setText("decision-hash", demoState.decision.decisionHash);
+function renderPipeline() {
+  const container = document.getElementById("pipeline-list");
+  if (!container) {
+    return;
+  }
+
+  const stateClass = Object.freeze({
+    DONE: "pipeline-done",
+    CURRENT: "pipeline-current",
+    PENDING: "pipeline-pending",
+  });
+
+  demoState.pipeline.forEach((step, index) => {
+    const item = document.createElement("li");
+    const marker = createTextElement("span", `pipeline-step ${mappedClass(stateClass, step.state, "pipeline state")}`, String(index + 1));
+    const copy = document.createElement("div");
+    copy.className = "pipeline-copy";
+    copy.appendChild(createTextElement("strong", "", step.title));
+    copy.appendChild(createTextElement("span", "", step.detail));
+    item.appendChild(marker);
+    item.appendChild(copy);
+    container.appendChild(item);
+  });
 }
 
-function renderChecks() {
-  const body = document.getElementById("check-table-body");
+function selectRecommendation(recommendationId) {
+  const recommendation = demoState.recommendations.find((item) => item.id === recommendationId);
+  if (!recommendation) {
+    throw new Error("unknown recommendation");
+  }
+
+  setText("detail-symbol-mark", recommendation.mark);
+  setText("detail-symbol", recommendation.symbol);
+  setText("detail-meta", `${recommendation.side} · ${recommendation.setup}`);
+  setText("detail-entry", recommendation.entry);
+  setText("detail-stop", recommendation.stop);
+  setText("detail-target", recommendation.target);
+  setText("detail-status", recommendation.status);
+  setText("detail-source", recommendation.source);
+  setText("detail-risk", recommendation.risk);
+  setText("detail-validity", recommendation.validity);
+  setText("detail-thesis", recommendation.thesis);
+  setText("detail-counter", recommendation.counter);
+
+  const rows = document.querySelectorAll("[data-recommendation-id]");
+  for (const row of rows) {
+    row.className = row.dataset.recommendationId === recommendationId ? "recommendation-row selected" : "recommendation-row";
+  }
+}
+
+function renderRecommendations() {
+  const container = document.getElementById("recommendation-list");
+  if (!container) {
+    return;
+  }
+
+  for (const recommendation of demoState.recommendations) {
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "recommendation-row";
+    row.dataset.recommendationId = recommendation.id;
+    row.appendChild(createTextElement("div", "symbol-mark", recommendation.mark));
+    row.appendChild(recommendationCopy(recommendation));
+    row.appendChild(createStatusPill(recommendation.status));
+    row.addEventListener("click", () => selectRecommendation(recommendation.id));
+    container.appendChild(row);
+  }
+
+  selectRecommendation(demoState.recommendations[0].id);
+}
+
+function renderTrades() {
+  const body = document.getElementById("trade-table-body");
   if (!body) {
     return;
   }
 
-  for (const check of demoState.checks) {
+  for (const trade of demoState.trades) {
     const row = document.createElement("tr");
-    row.appendChild(createTextElement("td", "check-name", check.name));
-    row.appendChild(createTextElement("td", "check-actual", check.actual));
-    row.appendChild(createTextElement("td", "check-limit", check.limit));
-
+    row.appendChild(createTextElement("td", "", trade.symbol));
+    row.appendChild(createTextElement("td", "", trade.side));
+    row.appendChild(createTextElement("td", "", trade.entry));
+    row.appendChild(createTextElement("td", "", trade.result));
     const statusCell = document.createElement("td");
-    const styleSuffix = mappedClass(STATUS_CLASS, check.status, "check status class");
-    statusCell.appendChild(createTextElement("span", `status-pill status-${styleSuffix}`, check.status));
+    statusCell.appendChild(createStatusPill(trade.status));
     row.appendChild(statusCell);
+    row.appendChild(createTextElement("td", "", trade.reconciliation));
     body.appendChild(row);
+  }
+}
+
+function renderJournal() {
+  const container = document.getElementById("journal-list");
+  if (!container) {
+    return;
+  }
+
+  for (const entry of demoState.journal) {
+    const item = document.createElement("li");
+    item.className = "journal-item";
+    item.appendChild(createTextElement("time", "journal-time", entry.time));
+
+    const copy = document.createElement("div");
+    copy.appendChild(createTextElement("h3", "", entry.title));
+    copy.appendChild(createTextElement("p", "", entry.detail));
+
+    const tags = document.createElement("div");
+    tags.className = "tag-list";
+    for (const tag of entry.tags) {
+      tags.appendChild(createTextElement("span", "tag", tag));
+    }
+    copy.appendChild(tags);
+    item.appendChild(copy);
+    container.appendChild(item);
   }
 }
 
@@ -213,8 +351,8 @@ function renderSystems() {
 
     const header = document.createElement("div");
     header.className = "system-card-header";
-    const stateSuffix = mappedClass(SYSTEM_STATE_CLASS, system.state, "system state class");
     header.appendChild(createTextElement("h3", "system-title", system.label));
+    const stateSuffix = mappedClass(SYSTEM_STATE_CLASS, system.state, "system state class");
     header.appendChild(createTextElement("span", `system-state state-${stateSuffix}`, system.state));
 
     card.appendChild(header);
@@ -223,34 +361,52 @@ function renderSystems() {
   }
 }
 
-function renderAudit() {
-  const container = document.getElementById("audit-list");
-  if (!container) {
-    return;
+function activateView(viewName) {
+  const copy = VIEW_COPY[viewName];
+  if (!copy) {
+    throw new Error("unknown view");
   }
 
-  for (const event of demoState.audit) {
-    const item = document.createElement("li");
-    item.className = "audit-item";
-    item.appendChild(createTextElement("time", "audit-time", event.time));
+  setText("view-eyebrow", copy.eyebrow);
+  setText("view-title", copy.title);
+  setText("view-subtitle", copy.subtitle);
 
-    const copy = document.createElement("div");
-    copy.appendChild(createTextElement("h3", "audit-title", event.title));
-    copy.appendChild(createTextElement("p", "audit-detail", event.detail));
-    item.appendChild(copy);
-    container.appendChild(item);
+  const panels = document.querySelectorAll("[data-view-panel]");
+  for (const panel of panels) {
+    panel.hidden = panel.dataset.viewPanel !== viewName;
+  }
+
+  const buttons = document.querySelectorAll("[data-view]");
+  for (const button of buttons) {
+    button.className = button.dataset.view === viewName ? "nav-button active" : "nav-button";
+  }
+
+  document.documentElement.dataset.activeView = viewName;
+}
+
+function bindNavigation() {
+  const buttons = document.querySelectorAll("[data-view]");
+  for (const button of buttons) {
+    button.addEventListener("click", () => activateView(button.dataset.view));
+  }
+
+  const openButtons = document.querySelectorAll("[data-open-view]");
+  for (const button of openButtons) {
+    button.addEventListener("click", () => activateView(button.dataset.openView));
   }
 }
 
 function initializeDemo() {
   document.documentElement.dataset.demoSource = DEMO_SOURCE;
   document.documentElement.dataset.readOnlyBoundary = READ_ONLY_BOUNDARY;
-  renderMetrics();
-  renderRiskBars();
-  renderProposal();
-  renderChecks();
+  renderOverview();
+  renderPipeline();
+  renderRecommendations();
+  renderTrades();
+  renderJournal();
   renderSystems();
-  renderAudit();
+  bindNavigation();
+  activateView("overview");
 }
 
 initializeDemo();
