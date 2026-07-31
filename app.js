@@ -170,54 +170,12 @@ const demoState = Object.freeze({
     Object.freeze({ state: "PENDING", title: "Backend implementation", detail: "API, database, auth, and gateway remain separate PRs." }),
   ]),
   systems: Object.freeze([
-    Object.freeze({
-      label: "Public app shell",
-      detail: "Static browser-only preview with fake records.",
-      state: "PREVIEW",
-      dependency: "None",
-      blocker: "None",
-      next: "N/A",
-    }),
-    Object.freeze({
-      label: "B1 specifications",
-      detail: "Architecture sequence B1-01 through B1-07 merged.",
-      state: "HEALTHY",
-      dependency: "None",
-      blocker: "None",
-      next: "N/A",
-    }),
-    Object.freeze({
-      label: "Safety Gateway",
-      detail: "No runtime connection in the public preview.",
-      state: "BLOCKED",
-      dependency: "Risk Vault, backend deployment",
-      blocker: "B1-PRE-01 not implemented",
-      next: "Independent safety review of PAPER evidence mode",
-    }),
-    Object.freeze({
-      label: "PAPER evidence mode",
-      detail: "B1-PRE-01 is not implemented.",
-      state: "BLOCKED",
-      dependency: "Reviewed evidence specification",
-      blocker: "B1-PRE-01 not implemented",
-      next: "Author and review B1-PRE-01",
-    }),
-    Object.freeze({
-      label: "MT5 provenance",
-      detail: "No live or authenticated MT5 source exists.",
-      state: "OFFLINE",
-      dependency: "Authenticated MT5 bridge",
-      blocker: "No authenticated MT5 provenance",
-      next: "Define and review MT5 authentication path",
-    }),
-    Object.freeze({
-      label: "Broker execution",
-      detail: "No order module, endpoint, or network path exists — no broker connection.",
-      state: "ABSENT",
-      dependency: "Out of scope for B1",
-      blocker: "no broker connection",
-      next: "Not scheduled",
-    }),
+    Object.freeze({ label: "Public app shell", state: "PREVIEW", dependency: "None", blocker: "None", next: "N/A" }),
+    Object.freeze({ label: "B1 specifications", state: "HEALTHY", dependency: "None", blocker: "None", next: "N/A" }),
+    Object.freeze({ label: "Safety Gateway", state: "BLOCKED", dependency: "Risk Vault, backend deployment", blocker: "B1-PRE-01 not implemented", next: "Independent safety review of PAPER evidence mode" }),
+    Object.freeze({ label: "PAPER evidence mode", state: "BLOCKED", dependency: "Reviewed evidence specification", blocker: "B1-PRE-01 not implemented", next: "Author and review B1-PRE-01" }),
+    Object.freeze({ label: "MT5 provenance", state: "OFFLINE", dependency: "Authenticated MT5 bridge", blocker: "No authenticated MT5 provenance", next: "Define and review MT5 authentication path" }),
+    Object.freeze({ label: "Broker execution", state: "ABSENT", dependency: "Out of scope for B1", blocker: "no broker connection", next: "Not scheduled" }),
   ]),
 });
 
@@ -298,16 +256,18 @@ function renderOverview() {
   setText("metric-overall-limit", formatCurrency(overallReference));
 
   const container = document.getElementById("overview-recommendations");
-  if (container) {
-    for (const recommendation of demoState.recommendations) {
-      const row = document.createElement("div");
-      row.className = "overview-rec-row";
-      row.appendChild(createTextElement("span", "overview-rec-symbol", recommendation.symbol));
-      row.appendChild(createTextElement("span", "overview-rec-side", recommendation.side));
-      row.appendChild(createTextElement("span", "overview-rec-setup", recommendation.setup));
-      row.appendChild(createStatusPill(recommendation.status));
-      container.appendChild(row);
-    }
+  if (!container) {
+    return;
+  }
+
+  for (const recommendation of demoState.recommendations) {
+    const row = document.createElement("div");
+    row.className = "overview-rec-row";
+    row.appendChild(createTextElement("span", "overview-rec-symbol", recommendation.symbol));
+    row.appendChild(createTextElement("span", "overview-rec-side", recommendation.side));
+    row.appendChild(createTextElement("span", "overview-rec-setup", recommendation.setup));
+    row.appendChild(createStatusPill(recommendation.status));
+    container.appendChild(row);
   }
 }
 
@@ -326,12 +286,12 @@ function renderPipeline() {
   for (const step of demoState.pipeline) {
     const item = document.createElement("li");
     item.className = "pipeline-row";
-    const marker = createTextElement("span", `pipeline-marker ${mappedClass(stateClass, step.state, "pipeline state")}`, step.state);
+    item.appendChild(createTextElement("span", `pipeline-marker ${mappedClass(stateClass, step.state, "pipeline state")}`, step.state));
+
     const copy = document.createElement("div");
     copy.className = "pipeline-copy";
     copy.appendChild(createTextElement("strong", "", step.title));
     copy.appendChild(createTextElement("span", "", step.detail));
-    item.appendChild(marker);
     item.appendChild(copy);
     container.appendChild(item);
   }
@@ -363,17 +323,33 @@ function selectRecommendation(recommendationId) {
 }
 
 function applyRecommendationFilter(filter) {
+  mappedClass(RECOMMENDATION_FILTER_CLASS, filter, "recommendation filter");
+
+  const selectedRow = document.querySelector(".recommendation-row.selected");
+  const selectedId = selectedRow ? selectedRow.dataset.recommendationId : "";
+  const selectedRecommendation = demoState.recommendations.find((item) => item.id === selectedId);
+  const selectionStillVisible = selectedRecommendation && (filter === "ALL" || selectedRecommendation.status === filter);
+  const nextRecommendation = selectionStillVisible
+    ? selectedRecommendation
+    : demoState.recommendations.find((item) => filter === "ALL" || item.status === filter);
+
+  if (!nextRecommendation) {
+    throw new Error("recommendation filter has no matching record");
+  }
+
   const rows = document.querySelectorAll("[data-recommendation-id]");
   for (const row of rows) {
-    const status = row.dataset.recommendationStatus;
-    row.hidden = filter !== "ALL" && status !== filter;
+    row.hidden = filter !== "ALL" && row.dataset.recommendationStatus !== filter;
   }
 
   const tabs = document.querySelectorAll("[data-recommendation-filter]");
   for (const tab of tabs) {
-    tab.className = tab.dataset.recommendationFilter === filter ? "filter-tab active" : "filter-tab";
-    tab.setAttribute("aria-selected", tab.dataset.recommendationFilter === filter ? "true" : "false");
+    const active = tab.dataset.recommendationFilter === filter;
+    tab.className = active ? "filter-tab active" : "filter-tab";
+    tab.setAttribute("aria-selected", active ? "true" : "false");
   }
+
+  selectRecommendation(nextRecommendation.id);
 }
 
 function renderRecommendations() {
@@ -400,7 +376,6 @@ function renderRecommendations() {
     tab.addEventListener("click", () => applyRecommendationFilter(tab.dataset.recommendationFilter));
   }
 
-  selectRecommendation(demoState.recommendations[0].id);
   applyRecommendationFilter("ALL");
 }
 
@@ -416,12 +391,15 @@ function renderTrades() {
     row.appendChild(createTextElement("td", "", trade.side));
     row.appendChild(createTextElement("td", "cell-numeric", trade.entry));
     row.appendChild(createTextElement("td", "cell-numeric", trade.result));
+
     const statusCell = document.createElement("td");
     statusCell.appendChild(createStatusPill(trade.status));
     row.appendChild(statusCell);
+
     const reconciliationCell = document.createElement("td");
     reconciliationCell.appendChild(createReconciliationPill(trade.reconciliation));
     row.appendChild(reconciliationCell);
+
     const provenanceCell = document.createElement("td");
     provenanceCell.appendChild(createTextElement("span", "provenance-note", "Operator-reported · no broker confirmation"));
     row.appendChild(provenanceCell);
