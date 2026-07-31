@@ -11,6 +11,7 @@ const STATUS_CLASS = Object.freeze({
   OPEN_MANUAL: "open",
   CLOSED: "closed",
   DRAFT: "draft",
+  BOUNDARY: "boundary",
 });
 
 const SYSTEM_STATE_CLASS = Object.freeze({
@@ -18,6 +19,7 @@ const SYSTEM_STATE_CLASS = Object.freeze({
   BLOCKED: "blocked",
   ABSENT: "absent",
   PREVIEW: "preview",
+  OFFLINE: "offline",
 });
 
 const VIEW_COPY = Object.freeze({
@@ -135,7 +137,7 @@ const demoState = Object.freeze({
     Object.freeze({ label: "B1 specifications", detail: "Architecture sequence B1-01 through B1-07 merged.", state: "HEALTHY" }),
     Object.freeze({ label: "Safety Gateway", detail: "No runtime connection in the public preview.", state: "BLOCKED" }),
     Object.freeze({ label: "PAPER evidence mode", detail: "B1-PRE-01 is not implemented.", state: "BLOCKED" }),
-    Object.freeze({ label: "MT5 provenance", detail: "No live or authenticated MT5 source exists.", state: "ABSENT" }),
+    Object.freeze({ label: "MT5 provenance", detail: "No live or authenticated MT5 source exists.", state: "OFFLINE" }),
     Object.freeze({ label: "Broker execution", detail: "No order module, endpoint, or network path exists.", state: "ABSENT" }),
   ]),
 });
